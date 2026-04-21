@@ -1,4 +1,4 @@
-app_code = r'''
+app_code = r
 import os
 import re
 import math
@@ -1234,4 +1234,3 @@ if run_button:
         st.info("Please try again in a few minutes or choose another ticker.")
 
 st.caption("For academic research and decision-support demonstration only. Not investment advice.")
-'''
