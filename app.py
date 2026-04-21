@@ -45,6 +45,192 @@ DEVICE = torch.device("cpu")
 NEWS_LOOKBACK_DAYS = 45
 
 # =========================================================
+# YAHOO FINANCE RATE LIMIT FIX
+# =========================================================
+
+def create_yfinance_session_with_retries():
+    """Create a session with proper headers and retries for Yahoo Finance"""
+    session = requests.Session()
+    
+    # Set headers that mimic a real browser
+    session.headers.update({
+        'User-Agent': 'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36',
+        'Accept': 'text/html,application/xhtml+xml,application/xml;q=0.9,image/avif,image/webp,*/*;q=0.8',
+        'Accept-Language': 'en-US,en;q=0.5',
+        'Accept-Encoding': 'gzip, deflate, br',
+        'DNT': '1',
+        'Connection': 'keep-alive',
+        'Upgrade-Insecure-Requests': '1',
+        'Sec-Fetch-Dest': 'document',
+        'Sec-Fetch-Mode': 'navigate',
+        'Sec-Fetch-Site': 'none',
+        'Sec-Fetch-User': '?1',
+        'Cache-Control': 'max-age=0',
+    })
+    
+    # Configure retries with backoff
+    retry_strategy = Retry(
+        total=2,
+        backoff_factor=1,
+        status_forcelist=[429, 500, 502, 503, 504],
+        allowed_methods=["HEAD", "GET", "OPTIONS"],
+        respect_retry_after_header=True
+    )
+    
+    adapter = HTTPAdapter(max_retries=retry_strategy, pool_connections=10, pool_maxsize=10)
+    session.mount("http://", adapter)
+    session.mount("https://", adapter)
+    
+    return session
+
+@st.cache_data(ttl=600, show_spinner=False)  # Cache for 10 minutes
+def fetch_market_data(ticker: str) -> pd.DataFrame:
+    """Fetch live market data from Yahoo Finance with rate limit handling"""
+    
+    # Check session state cache first
+    if 'cached_market_data' in st.session_state and ticker in st.session_state.cached_market_data:
+        cache_time = st.session_state.cached_market_data.get(f"{ticker}_time", 0)
+        if (datetime.now() - cache_time).total_seconds() < 600:  # 10 minutes cache
+            return st.session_state.cached_market_data[ticker]
+    
+    # Try multiple methods with increasing delays
+    methods = [
+        {"name": "ticker_history", "delay": 0},
+        {"name": "download_with_session", "delay": 2},
+        {"name": "download_plain", "delay": 4},
+    ]
+    
+    hist = None
+    last_error = None
+    
+    for method in methods:
+        try:
+            if method["delay"] > 0:
+                time.sleep(method["delay"])
+            
+            if method["name"] == "ticker_history":
+                # Method 1: Use Ticker object with custom session
+                session = create_yfinance_session_with_retries()
+                ticker_obj = yf.Ticker(ticker, session=session)
+                hist = ticker_obj.history(
+                    period="2y",
+                    interval="1d",
+                    auto_adjust=True,
+                    actions=False
+                )
+                
+            elif method["name"] == "download_with_session":
+                # Method 2: Use download with custom session
+                session = create_yfinance_session_with_retries()
+                hist = yf.download(
+                    ticker,
+                    period="2y",
+                    interval="1d",
+                    auto_adjust=True,
+                    progress=False,
+                    session=session,
+                    threads=False,
+                    ignore_tz=True,
+                    prepost=False
+                )
+                
+            else:
+                # Method 3: Plain download as last resort
+                hist = yf.download(
+                    ticker,
+                    period="2y",
+                    interval="1d",
+                    auto_adjust=True,
+                    progress=False,
+                    threads=False,
+                    ignore_tz=True
+                )
+            
+            # Check if we got valid data
+            if hist is not None and not hist.empty and len(hist) > 10:
+                break
+            else:
+                hist = None
+                
+        except Exception as e:
+            last_error = str(e)
+            error_msg = str(e).lower()
+            if "429" in error_msg or "rate" in error_msg or "too many" in error_msg:
+                # Rate limit - try next method with longer delay
+                time.sleep(method["delay"] + 3)
+                continue
+            elif method == methods[-1]:  # Last method failed
+                raise
+            continue
+    
+    # If all methods failed
+    if hist is None or hist.empty:
+        st.error(f"⚠️ Yahoo Finance rate limit reached for {ticker}")
+        st.info("""
+        **Solution for rate limiting:**
+        
+        1. **Wait 2-3 minutes** - Yahoo Finance rate limits shared IPs temporarily
+        2. **Try a different ticker** - Some tickers may work when others don't
+        3. **Refresh the page** - This creates a new session
+        4. **The app caches data for 10 minutes** - Once successful, it stays cached
+        
+        Popular tickers that often work: **MSFT, GOOGL, NVDA, TSLA**
+        """)
+        
+        raise Exception(f"Cannot fetch live data for {ticker}. Please wait and try again. Error: {last_error}")
+    
+    # Clean up the dataframe
+    if isinstance(hist.index, pd.DatetimeIndex):
+        hist = hist.reset_index()
+    elif 'Date' not in hist.columns:
+        hist = hist.reset_index()
+    
+    # Handle MultiIndex columns
+    if isinstance(hist.columns, pd.MultiIndex):
+        hist.columns = [col[0] if isinstance(col, tuple) else col for col in hist.columns]
+    
+    # Standardize column names
+    col_map = {}
+    for col in hist.columns:
+        col_lower = str(col).lower()
+        if 'date' in col_lower:
+            col_map[col] = 'Date'
+        elif 'open' in col_lower:
+            col_map[col] = 'Open'
+        elif 'high' in col_lower:
+            col_map[col] = 'High'
+        elif 'low' in col_lower:
+            col_map[col] = 'Low'
+        elif 'close' in col_lower:
+            col_map[col] = 'Close'
+        elif 'volume' in col_lower:
+            col_map[col] = 'Volume'
+    
+    if col_map:
+        hist = hist.rename(columns=col_map)
+    
+    # Ensure we have all required columns
+    required = ['Date', 'Open', 'High', 'Low', 'Close', 'Volume']
+    for col in required:
+        if col not in hist.columns:
+            if col == 'Volume':
+                hist[col] = 0
+            else:
+                hist[col] = hist['Close'] if 'Close' in hist.columns else 0
+    
+    # Convert Date to datetime and sort
+    hist['Date'] = pd.to_datetime(hist['Date'])
+    hist = hist.sort_values('Date').reset_index(drop=True)
+    
+    # Cache in session state
+    if 'cached_market_data' not in st.session_state:
+        st.session_state.cached_market_data = {}
+    st.session_state.cached_market_data[ticker] = hist[required].copy()
+    st.session_state.cached_market_data[f"{ticker}_time"] = datetime.now()
+    
+    return hist[required].copy()
+
+# =========================================================
 # STYLING
 # =========================================================
 st.markdown("""
@@ -494,113 +680,6 @@ def get_embedder():
 # =========================================================
 # MARKET DATA + FEATURES
 # =========================================================
-def create_robust_session():
-    """Create a requests session with retry strategy for Yahoo Finance"""
-    session = requests.Session()
-    retries = Retry(
-        total=3,
-        backoff_factor=0.5,
-        status_forcelist=[429, 500, 502, 503, 504],
-        allowed_methods=["GET"]
-    )
-    adapter = HTTPAdapter(max_retries=retries)
-    session.mount('http://', adapter)
-    session.mount('https://', adapter)
-    session.headers.update({
-        'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36',
-        'Accept': 'text/html,application/xhtml+xml,application/xml;q=0.9,image/webp,*/*;q=0.8',
-        'Accept-Language': 'en-US,en;q=0.5',
-        'Accept-Encoding': 'gzip, deflate',
-        'Connection': 'keep-alive',
-    })
-    return session
-
-@st.cache_data(ttl=300, show_spinner=False)
-def fetch_market_data(ticker: str) -> pd.DataFrame:
-    """Fetch live market data from Yahoo Finance with rate limit handling"""
-    
-    hist = None
-    session = create_robust_session()
-    
-    # Try multiple approaches with delays between attempts
-    approaches = [
-        ("direct_download", lambda: yf.download(
-            ticker, period="2y", interval="1d", auto_adjust=True,
-            progress=False, session=session, threads=False, ignore_tz=True
-        )),
-        ("ticker_object", lambda: yf.Ticker(ticker, session=session).history(
-            period="2y", interval="1d", auto_adjust=True
-        )),
-        ("no_session", lambda: yf.download(
-            ticker, period="2y", interval="1d", auto_adjust=True,
-            progress=False, threads=False
-        )),
-    ]
-    
-    for approach_name, approach_func in approaches:
-        try:
-            result = approach_func()
-            if result is not None and not result.empty:
-                hist = result
-                break
-        except Exception:
-            time.sleep(1.5)
-            continue
-    
-    # If all approaches failed, show helpful error
-    if hist is None or hist.empty:
-        st.error(f"⚠️ Cannot fetch live data for {ticker} from Yahoo Finance")
-        st.info("""
-        **Yahoo Finance on Streamlit Cloud:**
-        - Shared IP addresses are often rate-limited
-        - **Solution**: Wait 2-3 minutes and try again
-        - Or try a different ticker (AAPL, MSFT, GOOGL usually work better)
-        - The app caches data for 5 minutes to reduce API calls
-        """)
-        raise Exception(f"Unable to fetch live market data for {ticker}. Please wait a moment and try again, or select a different ticker.")
-    
-    # Clean up the dataframe
-    hist = hist.reset_index()
-    
-    # Handle MultiIndex columns
-    if isinstance(hist.columns, pd.MultiIndex):
-        hist.columns = [col[0] if isinstance(col, tuple) else col for col in hist.columns]
-    
-    # Standardize column names
-    col_map = {}
-    for col in hist.columns:
-        col_lower = str(col).lower()
-        if 'date' in col_lower:
-            col_map[col] = 'Date'
-        elif 'open' in col_lower:
-            col_map[col] = 'Open'
-        elif 'high' in col_lower:
-            col_map[col] = 'High'
-        elif 'low' in col_lower:
-            col_map[col] = 'Low'
-        elif 'close' in col_lower:
-            col_map[col] = 'Close'
-        elif 'volume' in col_lower:
-            col_map[col] = 'Volume'
-    
-    if col_map:
-        hist = hist.rename(columns=col_map)
-    
-    # Ensure we have all required columns
-    required = ['Date', 'Open', 'High', 'Low', 'Close', 'Volume']
-    for col in required:
-        if col not in hist.columns:
-            if col == 'Volume':
-                hist[col] = 0
-            else:
-                hist[col] = hist['Close'] if 'Close' in hist.columns else 0
-    
-    # Convert Date to datetime and sort
-    hist['Date'] = pd.to_datetime(hist['Date'])
-    hist = hist.sort_values('Date').reset_index(drop=True)
-    
-    return hist[required].copy()
-
 def build_features(hist: pd.DataFrame):
     df = hist.copy()
 
@@ -1204,6 +1283,16 @@ run_button = st.button("Run End-to-End Decision Pipeline", type="primary")
 # =========================================================
 if run_button:
     try:
+        # Rate limit warning
+        if 'last_attempt_time' in st.session_state:
+            time_since_last = (datetime.now() - st.session_state.last_attempt_time).total_seconds()
+            if time_since_last < 60:
+                st.warning("⚠️ Please wait at least 60 seconds between requests to avoid Yahoo Finance rate limits.")
+                st.info("Waiting 10 seconds before proceeding...")
+                time.sleep(10)
+        
+        st.session_state.last_attempt_time = datetime.now()
+        
         hist = fetch_market_data(ticker)
         feat_df, feature_cols = build_features(hist)
 
@@ -1283,7 +1372,12 @@ if run_button:
 
     except Exception as e:
         st.error(f"Pipeline failed: {str(e)}")
-        st.info("Please wait 1-2 minutes and try again, or select a different ticker.")
+        st.info("""
+        **Troubleshooting tips:**
+        - Wait 2-3 minutes and try again (Yahoo Finance rate limit)
+        - Try a different ticker (MSFT, GOOGL, NVDA often work better)
+        - Refresh the page to start a new session
+        """)
         st.stop()
 
 st.caption("For academic research and decision-support demonstration only. Not investment advice.")
