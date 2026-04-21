@@ -492,11 +492,14 @@ def get_embedder():
 # =========================================================
 # MARKET DATA + FEATURES
 # =========================================================
-@st.cache_data(ttl=60 * 30, show_spinner=False)
+@st.cache_data(ttl=600)
 def fetch_market_data(ticker: str) -> pd.DataFrame:
-    last_error = None
+    import time
+    import yfinance as yf
 
-    for _ in range(3):
+    hist = None  # Initialize hist variable
+
+    for attempt in range(3):
         try:
             hist = yf.download(
                 ticker,
@@ -504,50 +507,37 @@ def fetch_market_data(ticker: str) -> pd.DataFrame:
                 interval="1d",
                 auto_adjust=True,
                 progress=False,
-                threads=False,
+                threads=False
             )
 
             if hist is not None and not hist.empty:
-                hist = hist.reset_index()
-                hist.columns = [
-                    "_".join([str(c) for c in col if str(c) != ""]).strip("_")
-                    if isinstance(col, tuple) else str(col)
-                    for col in hist.columns
-                ]
+                break
 
-                rename_map = {}
-                for c in hist.columns:
-                    cl = c.lower()
-                    if cl.startswith("date"):
-                        rename_map[c] = "Date"
-                    elif cl.startswith("open"):
-                        rename_map[c] = "Open"
-                    elif cl.startswith("high"):
-                        rename_map[c] = "High"
-                    elif cl.startswith("low"):
-                        rename_map[c] = "Low"
-                    elif cl.startswith("close"):
-                        rename_map[c] = "Close"
-                    elif cl.startswith("volume"):
-                        rename_map[c] = "Volume"
+        except Exception:
+            pass
 
-                hist = hist.rename(columns=rename_map)
-                required = ["Date", "Open", "High", "Low", "Close", "Volume"]
-                hist = hist[required].copy()
-                hist["Date"] = pd.to_datetime(hist["Date"])
-                hist = hist.sort_values("Date").reset_index(drop=True)
-                return hist
+        time.sleep(2)  # retry delay
 
-            last_error = f"No market data returned for {ticker}"
+    # 🚨 fallback if still empty
+    if hist is None or hist.empty:
+        st.warning(f"⚠️ Live data unavailable for {ticker}. Using fallback sample data.")
 
-        except Exception as e:
-            last_error = str(e)
-            time.sleep(1.5)
+        dates = pd.date_range(end=pd.Timestamp.today(), periods=200)
+        hist = pd.DataFrame({
+            "Date": dates,
+            "Open": np.random.rand(len(dates)) * 100,
+            "High": np.random.rand(len(dates)) * 110,
+            "Low": np.random.rand(len(dates)) * 90,
+            "Close": np.random.rand(len(dates)) * 100,
+            "Volume": np.random.randint(1e6, 1e7, len(dates)),
+        })
 
-    raise ValueError(
-        f"Market data for {ticker} is temporarily unavailable. "
-        f"Yahoo Finance may be rate-limiting requests. Details: {last_error}"
-    )
+        return hist
+
+    hist = hist.reset_index()
+    hist.columns = ["Date", "Open", "High", "Low", "Close", "Volume"]
+
+    return hist
 
 def build_features(hist: pd.DataFrame):
     df = hist.copy()
@@ -1081,7 +1071,7 @@ def render_dark_html_table(df: pd.DataFrame):
     html = '<div class="dark-table-wrap"><table class="dark-table"><thead><tr>'
     for col in df.columns:
         html += f"<th>{col}</th>"
-    html += "</tr></thead><tbody>"
+    html += "<tr></thead><tbody>"
 
     for _, row in df.iterrows():
         html += "<tr>"
@@ -1152,15 +1142,16 @@ run_button = st.button("Run End-to-End Decision Pipeline", type="primary")
 # =========================================================
 if run_button:
     try:
+        hist = fetch_market_data(ticker)
+        feat_df, feature_cols = build_features(hist)
+
+        quant_outputs = run_quant_models(ticker, feat_df, feature_cols)
+
         with st.spinner("Loading models and embeddings..."):
             _models = get_models()
             _embedder = get_embedder()
 
         with st.spinner("Running QuantGenius pipeline..."):
-            hist = fetch_market_data(ticker)
-            feat_df, feature_cols = build_features(hist)
-
-            quant_outputs = run_quant_models(ticker, feat_df, feature_cols)
             live_docs, news_status, sec_status = fetch_live_docs(ticker)
             doc_embeddings = embed_documents(live_docs)
             retrieved_docs = retrieve_rag_evidence_balanced(ticker, horizon, live_docs, doc_embeddings, top_k=8)
@@ -1229,7 +1220,8 @@ if run_button:
             st.json(sec_status)
 
     except Exception as e:
-        st.error(str(e))
-        st.info("Please try again in a few minutes or choose another ticker.")
+        st.error("Pipeline failed but UI is still alive.")
+        st.exception(e)
+        st.stop()
 
 st.caption("For academic research and decision-support demonstration only. Not investment advice.")
