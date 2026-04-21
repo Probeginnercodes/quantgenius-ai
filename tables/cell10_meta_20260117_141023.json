@@ -1,0 +1,479 @@
+{
+  "created_at": "20260117_141023",
+  "has_datasets": true,
+  "has_cell7": true,
+  "has_lstm": true,
+  "best_models": {
+    "xgb_reg": {
+      "intermediate_10d": {
+        "task": "regression",
+        "horizon": "intermediate_10d",
+        "horizon_days": 10,
+        "target": "y_volnorm",
+        "device": "cuda",
+        "best_iter": 1.0,
+        "n_train": 19940,
+        "n_test": 4930,
+        "model_path": "/workspace/quantgenius_project/models/xgb_reg_y_volnorm_intermediate_10d_cuda_20260117_140700.json",
+        "R2": 0.0015048390570302494,
+        "RMSE": 3.6579119711910617,
+        "MAE": 2.746718767145743,
+        "DirAcc": 0.5787018255578094,
+        "IC": 0.058733549707838714,
+        "Sharpe": 0.8344582524389811,
+        "Turnover": 0.0,
+        "pred_std": 0.04402603471464025,
+        "n_eval": 4930.0,
+        "acc": NaN,
+        "balanced_acc": NaN,
+        "macro_f1": NaN,
+        "cm": NaN
+      },
+      "intermediate_15d": {
+        "task": "regression",
+        "horizon": "intermediate_15d",
+        "horizon_days": 15,
+        "target": "y_volnorm",
+        "device": "cuda",
+        "best_iter": 8.0,
+        "n_train": 19940,
+        "n_test": 4930,
+        "model_path": "/workspace/quantgenius_project/models/xgb_reg_y_volnorm_intermediate_15d_cuda_20260117_140701.json",
+        "R2": 0.0045230598555242585,
+        "RMSE": 4.508476950689867,
+        "MAE": 3.3717608431399504,
+        "DirAcc": 0.5920892494929006,
+        "IC": 0.0485245194626437,
+        "Sharpe": 0.8342703893938773,
+        "Turnover": 0.0,
+        "pred_std": 0.21766242645739248,
+        "n_eval": 4930.0,
+        "acc": NaN,
+        "balanced_acc": NaN,
+        "macro_f1": NaN,
+        "cm": NaN
+      },
+      "intermediate_20d": {
+        "task": "regression",
+        "horizon": "intermediate_20d",
+        "horizon_days": 20,
+        "target": "y_crossrank",
+        "device": "cuda",
+        "best_iter": 11.0,
+        "n_train": 20130,
+        "n_test": 4930,
+        "model_path": "/workspace/quantgenius_project/models/xgb_reg_y_crossrank_intermediate_20d_cuda_20260117_140702.json",
+        "R2": -0.0037051756421495607,
+        "RMSE": 0.5755195207206248,
+        "MAE": 0.5001136278344458,
+        "DirAcc": 0.4957403651115619,
+        "IC": 0.022136591609764937,
+        "Sharpe": 0.598128759260018,
+        "Turnover": 0.08130081300813008,
+        "pred_std": 0.04383773840898566,
+        "n_eval": 4930.0,
+        "acc": NaN,
+        "balanced_acc": NaN,
+        "macro_f1": NaN,
+        "cm": NaN
+      },
+      "short_1d": {
+        "task": "regression",
+        "horizon": "short_1d",
+        "horizon_days": 1,
+        "target": "y_raw",
+        "device": "cuda",
+        "best_iter": 11.0,
+        "n_train": 20130,
+        "n_test": 4930,
+        "model_path": "/workspace/quantgenius_project/models/xgb_reg_y_raw_short_1d_cuda_20260117_140657.json",
+        "R2": 0.00034640777944394685,
+        "RMSE": 0.022523639687682784,
+        "MAE": 0.014616666109702714,
+        "DirAcc": 0.5352941176470588,
+        "IC": 0.006315016110196334,
+        "Sharpe": 0.7492601961242276,
+        "Turnover": 0.05356055995130858,
+        "pred_std": 0.000484911730164958,
+        "n_eval": 4930.0,
+        "acc": NaN,
+        "balanced_acc": NaN,
+        "macro_f1": NaN,
+        "cm": NaN
+      },
+      "short_3d": {
+        "task": "regression",
+        "horizon": "short_3d",
+        "horizon_days": 3,
+        "target": "y_volnorm",
+        "device": "cuda",
+        "best_iter": 0.0,
+        "n_train": 19940,
+        "n_test": 4930,
+        "model_path": "/workspace/quantgenius_project/models/xgb_reg_y_volnorm_short_3d_cuda_20260117_140658.json",
+        "R2": 0.0001990370097011418,
+        "RMSE": 2.043288628282693,
+        "MAE": 1.4655555822362716,
+        "DirAcc": 0.554158215010142,
+        "IC": -0.003661971668159048,
+        "Sharpe": 0.8307945758016194,
+        "Turnover": 0.0,
+        "pred_std": 0.009609762405214873,
+        "n_eval": 4930.0,
+        "acc": NaN,
+        "balanced_acc": NaN,
+        "macro_f1": NaN,
+        "cm": NaN
+      },
+      "short_5d": {
+        "task": "regression",
+        "horizon": "short_5d",
+        "horizon_days": 5,
+        "target": "y_volnorm",
+        "device": "cuda",
+        "best_iter": 0.0,
+        "n_train": 19940,
+        "n_test": 4930,
+        "model_path": "/workspace/quantgenius_project/models/xgb_reg_y_volnorm_short_5d_cuda_20260117_140659.json",
+        "R2": 0.0005039456492401673,
+        "RMSE": 2.6117277593168367,
+        "MAE": 1.9251715939045688,
+        "DirAcc": 0.563894523326572,
+        "IC": 0.048762586109466065,
+        "Sharpe": 0.849328897040287,
+        "Turnover": 0.0,
+        "pred_std": 0.015839161134914997,
+        "n_eval": 4930.0,
+        "acc": NaN,
+        "balanced_acc": NaN,
+        "macro_f1": NaN,
+        "cm": NaN
+      }
+    },
+    "xgb_cls": {
+      "intermediate_10d": {
+        "task": "classification",
+        "horizon": "intermediate_10d",
+        "horizon_days": 10,
+        "target": "y_cls",
+        "device": "cuda",
+        "best_iter": NaN,
+        "n_train": 22630,
+        "n_test": 4930,
+        "model_path": "/workspace/quantgenius_project/models/xgb_cls_y_cls_intermediate_10d_cuda_20260117_140748.json",
+        "R2": NaN,
+        "RMSE": NaN,
+        "MAE": NaN,
+        "DirAcc": NaN,
+        "IC": NaN,
+        "Sharpe": NaN,
+        "Turnover": NaN,
+        "pred_std": NaN,
+        "n_eval": NaN,
+        "acc": 0.450709939148073,
+        "balanced_acc": 0.3291026551038745,
+        "macro_f1": 0.32717014272213824,
+        "cm": [
+          [
+            776,
+            52,
+            1065
+          ],
+          [
+            150,
+            15,
+            208
+          ],
+          [
+            1146,
+            87,
+            1431
+          ]
+        ]
+      },
+      "intermediate_15d": {
+        "task": "classification",
+        "horizon": "intermediate_15d",
+        "horizon_days": 15,
+        "target": "y_cls",
+        "device": "cuda",
+        "best_iter": NaN,
+        "n_train": 22630,
+        "n_test": 4930,
+        "model_path": "/workspace/quantgenius_project/models/xgb_cls_y_cls_intermediate_15d_cuda_20260117_140759.json",
+        "R2": NaN,
+        "RMSE": NaN,
+        "MAE": NaN,
+        "DirAcc": NaN,
+        "IC": NaN,
+        "Sharpe": NaN,
+        "Turnover": NaN,
+        "pred_std": NaN,
+        "n_eval": NaN,
+        "acc": 0.47606490872210955,
+        "balanced_acc": 0.34575396444683987,
+        "macro_f1": 0.34572720322932354,
+        "cm": [
+          [
+            819,
+            40,
+            990
+          ],
+          [
+            122,
+            15,
+            171
+          ],
+          [
+            1203,
+            57,
+            1513
+          ]
+        ]
+      },
+      "intermediate_20d": {
+        "task": "classification",
+        "horizon": "intermediate_20d",
+        "horizon_days": 20,
+        "target": "y_cls",
+        "device": "cuda",
+        "best_iter": NaN,
+        "n_train": 22630,
+        "n_test": 4930,
+        "model_path": "/workspace/quantgenius_project/models/xgb_cls_y_cls_intermediate_20d_cuda_20260117_140810.json",
+        "R2": NaN,
+        "RMSE": NaN,
+        "MAE": NaN,
+        "DirAcc": NaN,
+        "IC": NaN,
+        "Sharpe": NaN,
+        "Turnover": NaN,
+        "pred_std": NaN,
+        "n_eval": NaN,
+        "acc": 0.4776876267748479,
+        "balanced_acc": 0.32894344268271314,
+        "macro_f1": 0.32437003665497793,
+        "cm": [
+          [
+            746,
+            50,
+            1037
+          ],
+          [
+            117,
+            3,
+            154
+          ],
+          [
+            1177,
+            40,
+            1606
+          ]
+        ]
+      },
+      "short_1d": {
+        "task": "classification",
+        "horizon": "short_1d",
+        "horizon_days": 1,
+        "target": "y_cls",
+        "device": "cuda",
+        "best_iter": NaN,
+        "n_train": 22630,
+        "n_test": 4930,
+        "model_path": "/workspace/quantgenius_project/models/xgb_cls_y_cls_short_1d_cuda_20260117_140714.json",
+        "R2": NaN,
+        "RMSE": NaN,
+        "MAE": NaN,
+        "DirAcc": NaN,
+        "IC": NaN,
+        "Sharpe": NaN,
+        "Turnover": NaN,
+        "pred_std": NaN,
+        "n_eval": NaN,
+        "acc": 0.3791075050709939,
+        "balanced_acc": 0.37510794982929635,
+        "macro_f1": 0.375441196812406,
+        "cm": [
+          [
+            570,
+            416,
+            626
+          ],
+          [
+            443,
+            492,
+            482
+          ],
+          [
+            646,
+            448,
+            807
+          ]
+        ]
+      },
+      "short_3d": {
+        "task": "classification",
+        "horizon": "short_3d",
+        "horizon_days": 3,
+        "target": "y_cls",
+        "device": "cuda",
+        "best_iter": NaN,
+        "n_train": 22630,
+        "n_test": 4930,
+        "model_path": "/workspace/quantgenius_project/models/xgb_cls_y_cls_short_3d_cuda_20260117_140725.json",
+        "R2": NaN,
+        "RMSE": NaN,
+        "MAE": NaN,
+        "DirAcc": NaN,
+        "IC": NaN,
+        "Sharpe": NaN,
+        "Turnover": NaN,
+        "pred_std": NaN,
+        "n_eval": NaN,
+        "acc": 0.40872210953346855,
+        "balanced_acc": 0.3433157283771991,
+        "macro_f1": 0.3419227394841757,
+        "cm": [
+          [
+            767,
+            174,
+            885
+          ],
+          [
+            297,
+            87,
+            378
+          ],
+          [
+            982,
+            199,
+            1161
+          ]
+        ]
+      },
+      "short_5d": {
+        "task": "classification",
+        "horizon": "short_5d",
+        "horizon_days": 5,
+        "target": "y_cls",
+        "device": "cuda",
+        "best_iter": NaN,
+        "n_train": 22630,
+        "n_test": 4930,
+        "model_path": "/workspace/quantgenius_project/models/xgb_cls_y_cls_short_5d_cuda_20260117_140737.json",
+        "R2": NaN,
+        "RMSE": NaN,
+        "MAE": NaN,
+        "DirAcc": NaN,
+        "IC": NaN,
+        "Sharpe": NaN,
+        "Turnover": NaN,
+        "pred_std": NaN,
+        "n_eval": NaN,
+        "acc": 0.4466531440162272,
+        "balanced_acc": 0.34821976589422654,
+        "macro_f1": 0.3461803507468771,
+        "cm": [
+          [
+            825,
+            103,
+            958
+          ],
+          [
+            220,
+            39,
+            289
+          ],
+          [
+            1026,
+            132,
+            1338
+          ]
+        ]
+      }
+    },
+    "lstm": {
+      "intermediate_10d": {
+        "horizon": "intermediate_10d",
+        "horizon_days": 10,
+        "test_loss_norm": 0.36248156912624835,
+        "rmse_raw": 0.06741107255220413,
+        "mae_raw": 0.048373207449913025,
+        "r2_raw": 0.005208681813952731,
+        "diracc_raw": 0.567342799188641,
+        "target_norm_mu": 0.0068975407630205154,
+        "target_norm_sd": 0.06855552643537521,
+        "model_path": "/workspace/quantgenius_project/models/lstm_UPDATEDv3_intermediate_10d_20260117_140902.pt",
+        "device": "cuda"
+      },
+      "intermediate_15d": {
+        "horizon": "intermediate_15d",
+        "horizon_days": 15,
+        "test_loss_norm": 0.36972557939589024,
+        "rmse_raw": 0.08367941528558731,
+        "mae_raw": 0.06054317206144333,
+        "r2_raw": -0.029576800745948262,
+        "diracc_raw": 0.5397565922920893,
+        "target_norm_mu": 0.01049854513257742,
+        "target_norm_sd": 0.08438260108232498,
+        "model_path": "/workspace/quantgenius_project/models/lstm_UPDATEDv3_intermediate_15d_20260117_140902.pt",
+        "device": "cuda"
+      },
+      "intermediate_20d": {
+        "horizon": "intermediate_20d",
+        "horizon_days": 20,
+        "test_loss_norm": 0.37430204413831236,
+        "rmse_raw": 0.09650066494941711,
+        "mae_raw": 0.07131654769182205,
+        "r2_raw": -0.05236374053048087,
+        "diracc_raw": 0.5290060851926978,
+        "target_norm_mu": 0.014200634323060513,
+        "target_norm_sd": 0.09787630289793015,
+        "model_path": "/workspace/quantgenius_project/models/lstm_UPDATEDv3_intermediate_20d_20260117_140902.pt",
+        "device": "cuda"
+      },
+      "short_1d": {
+        "horizon": "short_1d",
+        "horizon_days": 1,
+        "test_loss_norm": 0.3270934849977493,
+        "rmse_raw": 0.0224323607981205,
+        "mae_raw": 0.014578606002032757,
+        "r2_raw": 0.008432375565489814,
+        "diracc_raw": 0.5306288032454362,
+        "target_norm_mu": 0.000670997891575098,
+        "target_norm_sd": 0.022557873278856277,
+        "model_path": "/workspace/quantgenius_project/models/lstm_UPDATEDv3_short_1d_20260117_140902.pt",
+        "device": "cuda"
+      },
+      "short_3d": {
+        "horizon": "short_3d",
+        "horizon_days": 3,
+        "test_loss_norm": 0.35417120307683947,
+        "rmse_raw": 0.03834286704659462,
+        "mae_raw": 0.026134857907891273,
+        "r2_raw": 0.005788241942815131,
+        "diracc_raw": 0.5484787018255578,
+        "target_norm_mu": 0.0020094101782888174,
+        "target_norm_sd": 0.038043126463890076,
+        "model_path": "/workspace/quantgenius_project/models/lstm_UPDATEDv3_short_3d_20260117_140902.pt",
+        "device": "cuda"
+      },
+      "short_5d": {
+        "horizon": "short_5d",
+        "horizon_days": 5,
+        "test_loss_norm": 0.3563231863081455,
+        "rmse_raw": 0.04844468832015991,
+        "mae_raw": 0.03406273201107979,
+        "r2_raw": 0.008162015993019023,
+        "diracc_raw": 0.555578093306288,
+        "target_norm_mu": 0.003371170721948147,
+        "target_norm_sd": 0.048879314213991165,
+        "model_path": "/workspace/quantgenius_project/models/lstm_UPDATEDv3_short_5d_20260117_140902.pt",
+        "device": "cuda"
+      }
+    }
+  },
+  "eval_csv": "/workspace/quantgenius_project/tables/cell10_model_eval_20260117_141023.csv",
+  "backtests_csv": "/workspace/quantgenius_project/tables/cell10_backtests_20260117_141023.csv",
+  "shap_csv": null
+}

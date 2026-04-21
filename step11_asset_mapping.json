@@ -1,0 +1,38 @@
+{
+  "asset_universe": [
+    "AAPL",
+    "MSFT",
+    "NVDA",
+    "AMZN",
+    "GOOGL",
+    "TSLA",
+    "META",
+    "JPM",
+    "KO",
+    "DIS"
+  ],
+  "asset_id_to_ticker": {
+    "0": "AAPL",
+    "1": "MSFT",
+    "2": "NVDA",
+    "3": "AMZN",
+    "4": "GOOGL",
+    "5": "TSLA",
+    "6": "META",
+    "7": "JPM",
+    "8": "KO",
+    "9": "DIS"
+  },
+  "ticker_to_asset_id": {
+    "AAPL": 0,
+    "MSFT": 1,
+    "NVDA": 2,
+    "AMZN": 3,
+    "GOOGL": 4,
+    "TSLA": 5,
+    "META": 6,
+    "JPM": 7,
+    "KO": 8,
+    "DIS": 9
+  }
+}
