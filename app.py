@@ -1,8 +1,9 @@
-
+app_code = r'''
 import os
 import re
 import math
 import json
+import time
 from pathlib import Path
 from datetime import datetime, timedelta, timezone
 from typing import List, Dict, Any
@@ -37,7 +38,6 @@ except NameError:
 
 TABLES_DIR = PROJECT_ROOT / "tables"
 MODELS_DIR = PROJECT_ROOT / "models"
-DATA_DIR = PROJECT_ROOT / "data"
 MAPPING_PATH = PROJECT_ROOT / "step11_asset_mapping.json"
 
 DEVICE = torch.device("cpu")
@@ -245,10 +245,6 @@ button[kind="primary"] {
 .small-note {
     color: #9fb0c5;
     font-size: 13px;
-}
-
-code {
-    color: #d9e7f5;
 }
 </style>
 """, unsafe_allow_html=True)
@@ -485,39 +481,62 @@ EMBEDDER = load_embedder()
 # =========================================================
 # MARKET DATA + FEATURES
 # =========================================================
+@st.cache_data(ttl=60 * 30, show_spinner=False)
 def fetch_market_data(ticker: str) -> pd.DataFrame:
-    hist = yf.download(ticker, period="2y", interval="1d", auto_adjust=True, progress=False)
-    if hist is None or hist.empty:
-        raise ValueError(f"No market data returned for {ticker}")
+    last_error = None
 
-    hist = hist.reset_index()
-    hist.columns = [
-        "_".join([str(c) for c in col if str(c) != ""]).strip("_")
-        if isinstance(col, tuple) else str(col)
-        for col in hist.columns
-    ]
+    for _ in range(3):
+        try:
+            hist = yf.download(
+                ticker,
+                period="2y",
+                interval="1d",
+                auto_adjust=True,
+                progress=False,
+                threads=False,
+            )
 
-    rename_map = {}
-    for c in hist.columns:
-        cl = c.lower()
-        if cl.startswith("date"):
-            rename_map[c] = "Date"
-        elif cl.startswith("open"):
-            rename_map[c] = "Open"
-        elif cl.startswith("high"):
-            rename_map[c] = "High"
-        elif cl.startswith("low"):
-            rename_map[c] = "Low"
-        elif cl.startswith("close"):
-            rename_map[c] = "Close"
-        elif cl.startswith("volume"):
-            rename_map[c] = "Volume"
+            if hist is not None and not hist.empty:
+                hist = hist.reset_index()
+                hist.columns = [
+                    "_".join([str(c) for c in col if str(c) != ""]).strip("_")
+                    if isinstance(col, tuple) else str(col)
+                    for col in hist.columns
+                ]
 
-    hist = hist.rename(columns=rename_map)
-    hist = hist[["Date", "Open", "High", "Low", "Close", "Volume"]].copy()
-    hist["Date"] = pd.to_datetime(hist["Date"])
-    hist = hist.sort_values("Date").reset_index(drop=True)
-    return hist
+                rename_map = {}
+                for c in hist.columns:
+                    cl = c.lower()
+                    if cl.startswith("date"):
+                        rename_map[c] = "Date"
+                    elif cl.startswith("open"):
+                        rename_map[c] = "Open"
+                    elif cl.startswith("high"):
+                        rename_map[c] = "High"
+                    elif cl.startswith("low"):
+                        rename_map[c] = "Low"
+                    elif cl.startswith("close"):
+                        rename_map[c] = "Close"
+                    elif cl.startswith("volume"):
+                        rename_map[c] = "Volume"
+
+                hist = hist.rename(columns=rename_map)
+                required = ["Date", "Open", "High", "Low", "Close", "Volume"]
+                hist = hist[required].copy()
+                hist["Date"] = pd.to_datetime(hist["Date"])
+                hist = hist.sort_values("Date").reset_index(drop=True)
+                return hist
+
+            last_error = f"No market data returned for {ticker}"
+
+        except Exception as e:
+            last_error = str(e)
+            time.sleep(1.5)
+
+    raise ValueError(
+        f"Market data for {ticker} is temporarily unavailable. "
+        f"Yahoo Finance may be rate-limiting requests. Details: {last_error}"
+    )
 
 def build_features(hist: pd.DataFrame):
     df = hist.copy()
@@ -1120,76 +1139,82 @@ run_button = st.button("Run End-to-End Decision Pipeline", type="primary")
 # MAIN
 # =========================================================
 if run_button:
-    with st.spinner("Running QuantGenius pipeline..."):
-        hist = fetch_market_data(ticker)
-        feat_df, feature_cols = build_features(hist)
+    try:
+        with st.spinner("Running QuantGenius pipeline..."):
+            hist = fetch_market_data(ticker)
+            feat_df, feature_cols = build_features(hist)
 
-        quant_outputs = run_quant_models(ticker, feat_df, feature_cols)
-        live_docs, news_status, sec_status = fetch_live_docs(ticker)
-        doc_embeddings = embed_documents(live_docs)
-        retrieved_docs = retrieve_rag_evidence_balanced(ticker, horizon, live_docs, doc_embeddings, top_k=8)
-        context_scores = compute_context_scores(retrieved_docs)
-        fusion_outputs = fuse_signals(quant_outputs, context_scores)
+            quant_outputs = run_quant_models(ticker, feat_df, feature_cols)
+            live_docs, news_status, sec_status = fetch_live_docs(ticker)
+            doc_embeddings = embed_documents(live_docs)
+            retrieved_docs = retrieve_rag_evidence_balanced(ticker, horizon, live_docs, doc_embeddings, top_k=8)
+            context_scores = compute_context_scores(retrieved_docs)
+            fusion_outputs = fuse_signals(quant_outputs, context_scores)
 
-    st.markdown(generate_front_explanation_business(ticker, horizon, fusion_outputs, context_scores), unsafe_allow_html=True)
+        st.markdown(generate_front_explanation_business(ticker, horizon, fusion_outputs, context_scores), unsafe_allow_html=True)
 
-    st.markdown(f"""
-    <div class="card-shell">
-        <div class="small-note">Final Result</div>
-        <div class="result-label {label_class(fusion_outputs['label'])}">{fusion_outputs['label']}</div>
-    </div>
-    """, unsafe_allow_html=True)
-
-    c1, c2, c3, c4 = st.columns(4)
-    with c1:
         st.markdown(f"""
-        <div class="metric-card">
-            <div class="metric-title">Price pattern model</div>
-            <div class="metric-value">{quant_outputs['ml_pred']:.4f}</div>
-            <div class="metric-sub">Pattern-based numerical forecasting from historical market features.</div>
-        </div>
-        """, unsafe_allow_html=True)
-    with c2:
-        st.markdown(f"""
-        <div class="metric-card">
-            <div class="metric-title">Deep learning model</div>
-            <div class="metric-value">{quant_outputs['dl_pred']:.4f}</div>
-            <div class="metric-sub">Nonlinear recognition across the recent price sequence window.</div>
-        </div>
-        """, unsafe_allow_html=True)
-    with c3:
-        st.markdown(f"""
-        <div class="metric-card">
-            <div class="metric-title">Sequence intelligence model</div>
-            <div class="metric-value">{quant_outputs['transformer_pred']:.4f}</div>
-            <div class="metric-sub">Temporal relationship and sequence-structure understanding.</div>
-        </div>
-        """, unsafe_allow_html=True)
-    with c4:
-        st.markdown(f"""
-        <div class="metric-card">
-            <div class="metric-title">Final decision score</div>
-            <div class="metric-value">{fusion_outputs['final_score']:.4f}</div>
-            <div class="metric-sub">Combined result after blending quantitative models with live evidence.</div>
+        <div class="card-shell">
+            <div class="small-note">Final Result</div>
+            <div class="result-label {label_class(fusion_outputs['label'])}">{fusion_outputs['label']}</div>
         </div>
         """, unsafe_allow_html=True)
 
-    st.markdown('<div class="section-title">Why this system reached this result</div>', unsafe_allow_html=True)
-    st.markdown(build_single_reason_card(fusion_outputs, context_scores), unsafe_allow_html=True)
+        c1, c2, c3, c4 = st.columns(4)
+        with c1:
+            st.markdown(f"""
+            <div class="metric-card">
+                <div class="metric-title">Price pattern model</div>
+                <div class="metric-value">{quant_outputs['ml_pred']:.4f}</div>
+                <div class="metric-sub">Pattern-based numerical forecasting from historical market features.</div>
+            </div>
+            """, unsafe_allow_html=True)
+        with c2:
+            st.markdown(f"""
+            <div class="metric-card">
+                <div class="metric-title">Deep learning model</div>
+                <div class="metric-value">{quant_outputs['dl_pred']:.4f}</div>
+                <div class="metric-sub">Nonlinear recognition across the recent price sequence window.</div>
+            </div>
+            """, unsafe_allow_html=True)
+        with c3:
+            st.markdown(f"""
+            <div class="metric-card">
+                <div class="metric-title">Sequence intelligence model</div>
+                <div class="metric-value">{quant_outputs['transformer_pred']:.4f}</div>
+                <div class="metric-sub">Temporal relationship and sequence-structure understanding.</div>
+            </div>
+            """, unsafe_allow_html=True)
+        with c4:
+            st.markdown(f"""
+            <div class="metric-card">
+                <div class="metric-title">Final decision score</div>
+                <div class="metric-value">{fusion_outputs['final_score']:.4f}</div>
+                <div class="metric-sub">Combined result after blending quantitative models with live evidence.</div>
+            </div>
+            """, unsafe_allow_html=True)
 
-    st.markdown('<div class="section-title">Client-Friendly Fusion Summary</div>', unsafe_allow_html=True)
-    render_dark_html_table(build_client_breakdown(fusion_outputs["component_scores"]))
+        st.markdown('<div class="section-title">Why this system reached this result</div>', unsafe_allow_html=True)
+        st.markdown(build_single_reason_card(fusion_outputs, context_scores), unsafe_allow_html=True)
 
-    st.markdown('<div class="section-title">Recent Price Context</div>', unsafe_allow_html=True)
-    render_price_chart(hist, ticker)
+        st.markdown('<div class="section-title">Client-Friendly Fusion Summary</div>', unsafe_allow_html=True)
+        render_dark_html_table(build_client_breakdown(fusion_outputs["component_scores"]))
 
-    st.markdown('<div class="section-title">Retrieved Evidence</div>', unsafe_allow_html=True)
-    render_dark_html_table(build_evidence_table_df(retrieved_docs))
+        st.markdown('<div class="section-title">Recent Price Context</div>', unsafe_allow_html=True)
+        render_price_chart(hist, ticker)
 
-    with st.expander("Data source checks"):
-        st.write("News pipeline")
-        st.json(news_status)
-        st.write("SEC pipeline")
-        st.json(sec_status)
+        st.markdown('<div class="section-title">Retrieved Evidence</div>', unsafe_allow_html=True)
+        render_dark_html_table(build_evidence_table_df(retrieved_docs))
+
+        with st.expander("Data source checks"):
+            st.write("News pipeline")
+            st.json(news_status)
+            st.write("SEC pipeline")
+            st.json(sec_status)
+
+    except Exception as e:
+        st.error(str(e))
+        st.info("Please try again in a few minutes or choose another ticker.")
 
 st.caption("For academic research and decision-support demonstration only. Not investment advice.")
+'''
