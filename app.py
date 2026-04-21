@@ -1,4 +1,4 @@
-app_code = r
+app_code = 
 import os
 import re
 import math
