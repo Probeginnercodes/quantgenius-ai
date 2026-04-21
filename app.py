@@ -34,7 +34,7 @@ st.set_page_config(
 try:
     PROJECT_ROOT = Path(__file__).resolve().parent
 except NameError:
-    PROJECT_ROOT = Path("/content/quantgenius-demo")
+    PROJECT_ROOT = Path(".")
 
 TABLES_DIR = PROJECT_ROOT / "tables"
 MODELS_DIR = PROJECT_ROOT / "models"
@@ -250,6 +250,11 @@ button[kind="primary"] {
 """, unsafe_allow_html=True)
 
 # =========================================================
+# EARLY UI MARKER
+# =========================================================
+st.markdown('<div class="small-note">QuantGenius interface loaded.</div>', unsafe_allow_html=True)
+
+# =========================================================
 # HELPERS
 # =========================================================
 def latest_match(folder: Path, pattern: str) -> Path:
@@ -417,6 +422,9 @@ def remap_transformer_keys_if_needed(sd):
         return sd2
     return sd
 
+# =========================================================
+# LAZY LOADERS
+# =========================================================
 @st.cache_resource
 def load_models():
     models = {}
@@ -470,13 +478,17 @@ def load_models():
 
     return models
 
-MODELS = load_models()
-
 @st.cache_resource
 def load_embedder():
     return SentenceTransformer("sentence-transformers/all-MiniLM-L6-v2")
 
-EMBEDDER = load_embedder()
+@st.cache_resource
+def get_models():
+    return load_models()
+
+@st.cache_resource
+def get_embedder():
+    return load_embedder()
 
 # =========================================================
 # MARKET DATA + FEATURES
@@ -635,10 +647,11 @@ def scale_and_window(feat_df, feature_cols):
 # QUANT MODELS
 # =========================================================
 def run_quant_models(ticker: str, feat_df: pd.DataFrame, feature_cols: List[str]) -> Dict[str, Any]:
+    models = get_models()
     x_seq, x_flat = scale_and_window(feat_df, feature_cols)
     asset_id = TICKER_TO_ASSET_ID[ticker]
 
-    booster = MODELS["xgb_intermediate_10d"]
+    booster = models["xgb_intermediate_10d"]
     n_expected = booster.num_features()
     x_used = x_flat.copy()
     if x_used.shape[1] < n_expected:
@@ -652,7 +665,7 @@ def run_quant_models(ticker: str, feat_df: pd.DataFrame, feature_cols: List[str]
     with torch.no_grad():
         xb = torch.from_numpy(x_seq.astype(np.float32)).to(DEVICE)
         aid = torch.from_numpy(np.array([asset_id], dtype=np.int64)).to(DEVICE)
-        y_lstm_norm = MODELS["lstm_short_3d"](xb, aid).cpu().numpy().reshape(-1)[0]
+        y_lstm_norm = models["lstm_short_3d"](xb, aid).cpu().numpy().reshape(-1)[0]
 
     mu = float(CELL10_META["best_models"]["lstm"]["short_3d"]["target_norm_mu"])
     sd = float(CELL10_META["best_models"]["lstm"]["short_3d"]["target_norm_sd"])
@@ -660,7 +673,7 @@ def run_quant_models(ticker: str, feat_df: pd.DataFrame, feature_cols: List[str]
 
     with torch.no_grad():
         xb = torch.from_numpy(x_seq.astype(np.float32)).to(DEVICE)
-        y_tr_norm = MODELS["transformer_intermediate_15d"](xb).cpu().numpy().reshape(-1)[0]
+        y_tr_norm = models["transformer_intermediate_15d"](xb).cpu().numpy().reshape(-1)[0]
     tr_pred = float(y_tr_norm * 0.05732867504361837 + 0.013723999097657915)
 
     return {
@@ -711,7 +724,6 @@ def fetch_live_docs(ticker: str):
         "cik_found": None
     }
 
-    # Alpha Vantage
     if api_key:
         try:
             end_dt = get_current_utc()
@@ -761,7 +773,6 @@ def fetch_live_docs(ticker: str):
             news_status["status"] = "exception"
             news_status["message"] = str(e)
 
-    # SEC
     try:
         ticker_cik = load_ticker_cik_map()
         cik10 = ticker_cik.get(ticker.upper().strip())
@@ -841,7 +852,8 @@ def embed_documents(docs: List[Dict[str, Any]]):
     if not docs:
         return np.zeros((0, 384), dtype=np.float32)
     texts = [d["text"] for d in docs]
-    emb = EMBEDDER.encode(texts, normalize_embeddings=True)
+    embedder = get_embedder()
+    emb = embedder.encode(texts, normalize_embeddings=True)
     return np.asarray(emb, dtype=np.float32)
 
 def retrieve_rag_evidence_balanced(ticker: str, horizon: str, docs: List[Dict[str, Any]], doc_embeddings: np.ndarray, top_k=8):
@@ -849,7 +861,8 @@ def retrieve_rag_evidence_balanced(ticker: str, horizon: str, docs: List[Dict[st
         return []
 
     query = f"{ticker} {horizon} earnings guidance revenue margins risks regulation competition demand outlook"
-    q_emb = EMBEDDER.encode([query], normalize_embeddings=True)[0].astype(np.float32)
+    embedder = get_embedder()
+    q_emb = embedder.encode([query], normalize_embeddings=True)[0].astype(np.float32)
 
     scores = doc_embeddings @ q_emb
 
@@ -1140,6 +1153,10 @@ run_button = st.button("Run End-to-End Decision Pipeline", type="primary")
 # =========================================================
 if run_button:
     try:
+        with st.spinner("Loading models and embeddings..."):
+            _models = get_models()
+            _embedder = get_embedder()
+
         with st.spinner("Running QuantGenius pipeline..."):
             hist = fetch_market_data(ticker)
             feat_df, feature_cols = build_features(hist)
