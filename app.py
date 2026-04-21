@@ -17,6 +17,8 @@ import xgboost as xgb
 import yfinance as yf
 import plotly.graph_objects as go
 from sentence_transformers import SentenceTransformer
+from requests.adapters import HTTPAdapter
+from urllib3.util.retry import Retry
 
 # =========================================================
 # PAGE CONFIG
@@ -492,52 +494,112 @@ def get_embedder():
 # =========================================================
 # MARKET DATA + FEATURES
 # =========================================================
-@st.cache_data(ttl=600)
+def create_robust_session():
+    """Create a requests session with retry strategy for Yahoo Finance"""
+    session = requests.Session()
+    retries = Retry(
+        total=3,
+        backoff_factor=0.5,
+        status_forcelist=[429, 500, 502, 503, 504],
+        allowed_methods=["GET"]
+    )
+    adapter = HTTPAdapter(max_retries=retries)
+    session.mount('http://', adapter)
+    session.mount('https://', adapter)
+    session.headers.update({
+        'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36',
+        'Accept': 'text/html,application/xhtml+xml,application/xml;q=0.9,image/webp,*/*;q=0.8',
+        'Accept-Language': 'en-US,en;q=0.5',
+        'Accept-Encoding': 'gzip, deflate',
+        'Connection': 'keep-alive',
+    })
+    return session
+
+@st.cache_data(ttl=300, show_spinner=False)
 def fetch_market_data(ticker: str) -> pd.DataFrame:
-    import time
-    import yfinance as yf
-
-    hist = None  # Initialize hist variable
-
-    for attempt in range(3):
+    """Fetch live market data from Yahoo Finance with rate limit handling"""
+    
+    hist = None
+    session = create_robust_session()
+    
+    # Try multiple approaches with delays between attempts
+    approaches = [
+        ("direct_download", lambda: yf.download(
+            ticker, period="2y", interval="1d", auto_adjust=True,
+            progress=False, session=session, threads=False, ignore_tz=True
+        )),
+        ("ticker_object", lambda: yf.Ticker(ticker, session=session).history(
+            period="2y", interval="1d", auto_adjust=True
+        )),
+        ("no_session", lambda: yf.download(
+            ticker, period="2y", interval="1d", auto_adjust=True,
+            progress=False, threads=False
+        )),
+    ]
+    
+    for approach_name, approach_func in approaches:
         try:
-            hist = yf.download(
-                ticker,
-                period="2y",
-                interval="1d",
-                auto_adjust=True,
-                progress=False,
-                threads=False
-            )
-
-            if hist is not None and not hist.empty:
+            result = approach_func()
+            if result is not None and not result.empty:
+                hist = result
                 break
-
         except Exception:
-            pass
-
-        time.sleep(2)  # retry delay
-
-    # 🚨 fallback if still empty
+            time.sleep(1.5)
+            continue
+    
+    # If all approaches failed, show helpful error
     if hist is None or hist.empty:
-        st.warning(f"⚠️ Live data unavailable for {ticker}. Using fallback sample data.")
-
-        dates = pd.date_range(end=pd.Timestamp.today(), periods=200)
-        hist = pd.DataFrame({
-            "Date": dates,
-            "Open": np.random.rand(len(dates)) * 100,
-            "High": np.random.rand(len(dates)) * 110,
-            "Low": np.random.rand(len(dates)) * 90,
-            "Close": np.random.rand(len(dates)) * 100,
-            "Volume": np.random.randint(1e6, 1e7, len(dates)),
-        })
-
-        return hist
-
+        st.error(f"⚠️ Cannot fetch live data for {ticker} from Yahoo Finance")
+        st.info("""
+        **Yahoo Finance on Streamlit Cloud:**
+        - Shared IP addresses are often rate-limited
+        - **Solution**: Wait 2-3 minutes and try again
+        - Or try a different ticker (AAPL, MSFT, GOOGL usually work better)
+        - The app caches data for 5 minutes to reduce API calls
+        """)
+        raise Exception(f"Unable to fetch live market data for {ticker}. Please wait a moment and try again, or select a different ticker.")
+    
+    # Clean up the dataframe
     hist = hist.reset_index()
-    hist.columns = ["Date", "Open", "High", "Low", "Close", "Volume"]
-
-    return hist
+    
+    # Handle MultiIndex columns
+    if isinstance(hist.columns, pd.MultiIndex):
+        hist.columns = [col[0] if isinstance(col, tuple) else col for col in hist.columns]
+    
+    # Standardize column names
+    col_map = {}
+    for col in hist.columns:
+        col_lower = str(col).lower()
+        if 'date' in col_lower:
+            col_map[col] = 'Date'
+        elif 'open' in col_lower:
+            col_map[col] = 'Open'
+        elif 'high' in col_lower:
+            col_map[col] = 'High'
+        elif 'low' in col_lower:
+            col_map[col] = 'Low'
+        elif 'close' in col_lower:
+            col_map[col] = 'Close'
+        elif 'volume' in col_lower:
+            col_map[col] = 'Volume'
+    
+    if col_map:
+        hist = hist.rename(columns=col_map)
+    
+    # Ensure we have all required columns
+    required = ['Date', 'Open', 'High', 'Low', 'Close', 'Volume']
+    for col in required:
+        if col not in hist.columns:
+            if col == 'Volume':
+                hist[col] = 0
+            else:
+                hist[col] = hist['Close'] if 'Close' in hist.columns else 0
+    
+    # Convert Date to datetime and sort
+    hist['Date'] = pd.to_datetime(hist['Date'])
+    hist = hist.sort_values('Date').reset_index(drop=True)
+    
+    return hist[required].copy()
 
 def build_features(hist: pd.DataFrame):
     df = hist.copy()
@@ -1071,7 +1133,7 @@ def render_dark_html_table(df: pd.DataFrame):
     html = '<div class="dark-table-wrap"><table class="dark-table"><thead><tr>'
     for col in df.columns:
         html += f"<th>{col}</th>"
-    html += "<tr></thead><tbody>"
+    html += "</tr></thead><tbody>"
 
     for _, row in df.iterrows():
         html += "<tr>"
@@ -1220,8 +1282,8 @@ if run_button:
             st.json(sec_status)
 
     except Exception as e:
-        st.error("Pipeline failed but UI is still alive.")
-        st.exception(e)
+        st.error(f"Pipeline failed: {str(e)}")
+        st.info("Please wait 1-2 minutes and try again, or select a different ticker.")
         st.stop()
 
 st.caption("For academic research and decision-support demonstration only. Not investment advice.")
